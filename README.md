@@ -1,58 +1,90 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Milestone 2 — Admin CRUD Dasar
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+## Langkah 1 — Aktifkan Routing API
 
-## About Laravel
+Laravel 11+ (termasuk versi 13 yang kamu pakai) tidak otomatis punya `routes/api.php` di
+project baru. Jalankan ini dulu di CMD (posisi di folder `restaurant-api`):
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
-
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
-
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+```
+php artisan install:api
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Kalau ditanya konfirmasi overwrite/publish (misal soal migration Sanctum), jawab **yes**.
+Ini akan:
+- Membuat file `routes/api.php` (kalau belum ada)
+- Mendaftarkan file itu otomatis ke `bootstrap/app.php`
+- Publish migration `create_personal_access_tokens_table` (tabel token Sanctum)
 
-## Contributing
+Setelah itu jalankan:
+```
+php artisan migrate
+```
+(cukup `migrate` biasa, bukan `fresh`, supaya data seeder yang sudah ada tidak hilang —
+ini cuma menambah 1 tabel baru untuk token Sanctum)
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Langkah 2 — Copy File dari Paket Ini
 
-## Code of Conduct
+- `app/Http/Middleware/EnsureUserHasRole.php` → masuk ke `app/Http/Middleware/`
+- `app/Http/Controllers/AuthController.php` → masuk ke `app/Http/Controllers/`
+- `app/Http/Controllers/Admin/*.php` (6 file) → masuk ke `app/Http/Controllers/Admin/`
+  (folder `Admin` mungkin belum ada, buat dulu)
+- `routes/api.php` → **timpa** file yang baru dibuat `install:api` tadi
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Langkah 3 — Daftarkan Middleware `role`
 
-## Security Vulnerabilities
+Buka `bootstrap/app.php`, cari bagian `->withMiddleware(function (Middleware $middleware) {`
+lalu tambahkan baris `alias` di dalamnya. Contoh setelah diedit:
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```php
+->withMiddleware(function (Middleware $middleware) {
+    $middleware->alias([
+        'role' => \App\Http\Middleware\EnsureUserHasRole::class,
+    ]);
+})
+```
 
-## License
+Kalau closure itu tadinya kosong (`function (Middleware $middleware) {})`), tinggal isi
+persis seperti contoh di atas.
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## Langkah 4 — Testing Manual via Postman (WAJIB sebelum lanjut)
+
+Ini checkpoint penting sesuai rencana kita — pastikan API-nya benar dulu sebelum sentuh
+frontend.
+
+1. **Login sebagai Admin:**
+   `POST http://localhost:8000/api/auth/login`
+   Body (JSON):
+   ```json
+   { "email": "admin@restoran.test", "password": "password" }
+   ```
+   Response harusnya berisi `token`. **Copy token itu.**
+
+   > Catatan: kalau server belum jalan, buka CMD baru di folder project, jalankan
+   > `php artisan serve` dulu supaya bisa diakses di `localhost:8000`.
+
+2. **Test endpoint Admin pakai token itu:**
+   `GET http://localhost:8000/api/admin/categories`
+   Di tab **Authorization** Postman → pilih **Bearer Token** → paste token dari langkah 1.
+
+   Harusnya muncul 2 kategori (Main Course, Beverage) dari seeder.
+
+3. **Test tanpa token / pakai token asal-asalan:**
+   Ulangi request yang sama tapi hapus tokennya → harusnya dapat `401 Unauthorized`.
+   Ini membuktikan endpoint admin sudah terlindungi.
+
+4. **Test dengan akun Kitchen (bukan Admin):**
+   Login pakai `kitchen@restoran.test` / `password`, pakai token itu untuk akses
+   `/api/admin/categories` → harusnya dapat `403 Forbidden` (bukti middleware `role:admin`
+   jalan dengan benar, Kitchen tidak bisa akses endpoint Admin).
+
+5. **Test CRUD lain:**
+   - `POST /api/admin/menus/{id}/option-groups` untuk tambah grup opsi baru ke menu
+   - `PATCH /api/admin/menus/{id}/toggle-availability` untuk toggle stok
+   - `POST /api/admin/tables/{id}/regenerate-token` untuk regenerate QR
+
+## Kalau Semua Test di Atas Lolos
+
+Milestone 2 selesai. Lanjut ke **Milestone 3 — Customer Flow Sampai Bayar** (endpoint
+resolve token meja, list menu untuk customer, `OrderPricingService`, dan integrasi
+Midtrans Sandbox + webhook). Ini bagian paling kritis di seluruh project, jadi kabari
+saya kalau sudah siap.

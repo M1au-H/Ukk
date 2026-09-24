@@ -6,5 +6,20 @@ use Illuminate\Database\Eloquent\Model;
 
 class OrderStatusLog extends Model
 {
-    //
+    protected $fillable = ['order_id', 'changed_by', 'status', 'changed_at'];
+
+    protected function casts(): array
+    {
+        return ['changed_at' => 'datetime'];
+    }
+
+    public function order()
+    {
+        return $this->belongsTo(Order::class);
+    }
+
+    public function changedBy()
+    {
+        return $this->belongsTo(User::class, 'changed_by');
+    }
 }
