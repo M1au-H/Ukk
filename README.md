@@ -1,90 +1,145 @@
-# Milestone 2 — Admin CRUD Dasar
+# Milestone 3 — Customer Flow Sampai Bayar
 
-## Langkah 1 — Aktifkan Routing API
+Ini bagian paling kritis: order → hitung ulang harga di server → Midtrans Snap →
+webhook → payment_status berubah jadi `success`.
 
-Laravel 11+ (termasuk versi 13 yang kamu pakai) tidak otomatis punya `routes/api.php` di
-project baru. Jalankan ini dulu di CMD (posisi di folder `restaurant-api`):
+## Langkah 1 — Daftar Akun Midtrans Sandbox
 
+1. Buka https://dashboard.sandbox.midtrans.com/register (gratis, khusus testing)
+2. Setelah login, buka menu **Settings → Access Keys**
+3. Catat **Server Key** dan **Client Key** (masih di mode Sandbox, bukan Production)
+
+## Langkah 2 — Install SDK Midtrans
+
+Di CMD, folder `restaurant-api`:
 ```
-php artisan install:api
-```
-
-Kalau ditanya konfirmasi overwrite/publish (misal soal migration Sanctum), jawab **yes**.
-Ini akan:
-- Membuat file `routes/api.php` (kalau belum ada)
-- Mendaftarkan file itu otomatis ke `bootstrap/app.php`
-- Publish migration `create_personal_access_tokens_table` (tabel token Sanctum)
-
-Setelah itu jalankan:
-```
-php artisan migrate
-```
-(cukup `migrate` biasa, bukan `fresh`, supaya data seeder yang sudah ada tidak hilang —
-ini cuma menambah 1 tabel baru untuk token Sanctum)
-
-## Langkah 2 — Copy File dari Paket Ini
-
-- `app/Http/Middleware/EnsureUserHasRole.php` → masuk ke `app/Http/Middleware/`
-- `app/Http/Controllers/AuthController.php` → masuk ke `app/Http/Controllers/`
-- `app/Http/Controllers/Admin/*.php` (6 file) → masuk ke `app/Http/Controllers/Admin/`
-  (folder `Admin` mungkin belum ada, buat dulu)
-- `routes/api.php` → **timpa** file yang baru dibuat `install:api` tadi
-
-## Langkah 3 — Daftarkan Middleware `role`
-
-Buka `bootstrap/app.php`, cari bagian `->withMiddleware(function (Middleware $middleware) {`
-lalu tambahkan baris `alias` di dalamnya. Contoh setelah diedit:
-
-```php
-->withMiddleware(function (Middleware $middleware) {
-    $middleware->alias([
-        'role' => \App\Http\Middleware\EnsureUserHasRole::class,
-    ]);
-})
+composer require midtrans/midtrans-php
 ```
 
-Kalau closure itu tadinya kosong (`function (Middleware $middleware) {})`), tinggal isi
-persis seperti contoh di atas.
+## Langkah 3 — Update `.env`
 
-## Langkah 4 — Testing Manual via Postman (WAJIB sebelum lanjut)
+Tambahkan baris ini di `.env`:
+```
+MIDTRANS_SERVER_KEY=isi_server_key_kamu
+MIDTRANS_CLIENT_KEY=isi_client_key_kamu
+MIDTRANS_IS_PRODUCTION=false
+```
 
-Ini checkpoint penting sesuai rencana kita — pastikan API-nya benar dulu sebelum sentuh
-frontend.
+## Langkah 4 — Copy File dari Paket Ini
 
-1. **Login sebagai Admin:**
-   `POST http://localhost:8000/api/auth/login`
-   Body (JSON):
+- `config/midtrans.php` → masuk ke `config/`
+- `app/Services/MidtransService.php` dan `app/Services/OrderPricingService.php` →
+  masuk ke `app/Services/` (folder ini belum ada, buat dulu)
+- `app/Http/Controllers/Customer/*.php` (3 file) → masuk ke
+  `app/Http/Controllers/Customer/` (folder baru, buat dulu)
+- `routes/api.php` → **timpa** file yang sudah ada (ini gabungan rute Admin dari
+  Milestone 2 + rute Customer yang baru, jadi aman ditimpa penuh)
+
+Setelah semua file masuk, jalankan:
+```
+composer dump-autoload
+```
+
+## Langkah 5 — Testing via Postman (checkpoint WAJIB)
+
+### A. Test alur normal (tanpa bayar sungguhan dulu)
+
+1. **Lihat menu:**
+   `GET http://localhost:8000/api/menus`
+   → catat salah satu `id` menu dan `id` dari `option_value` di dalamnya (buka
+   `GET /api/menus/{id}` untuk lihat detail option groups & values-nya)
+
+2. **Resolve meja:**
+   `GET http://localhost:8000/api/menu/resolve/{table_token}`
+   → ambil salah satu `table_token` dari tabel `tables` di phpMyAdmin
+
+3. **Buat order:**
+   `POST http://localhost:8000/api/orders`
+   Body (JSON) — sesuaikan `menu_id`/`option_value_ids` dengan id asli dari langkah 1:
    ```json
-   { "email": "admin@restoran.test", "password": "password" }
+   {
+     "table_token": "isi_token_meja",
+     "session_token": "test-session-123",
+     "customer_name": "Budi",
+     "items": [
+       {
+         "menu_id": 1,
+         "qty": 2,
+         "option_value_ids": [3, 5],
+         "note": "tidak pakai bawang"
+       }
+     ]
+   }
    ```
-   Response harusnya berisi `token`. **Copy token itu.**
+   Response harusnya berisi `order_id`, `total_price` (sudah dihitung ulang server,
+   BUKAN dari input kamu), dan `snap_token`.
 
-   > Catatan: kalau server belum jalan, buka CMD baru di folder project, jalankan
-   > `php artisan serve` dulu supaya bisa diakses di `localhost:8000`.
+4. **Cek order tersimpan dengan status `menunggu_pembayaran`:**
+   `GET http://localhost:8000/api/orders?session_token=test-session-123`
 
-2. **Test endpoint Admin pakai token itu:**
-   `GET http://localhost:8000/api/admin/categories`
-   Di tab **Authorization** Postman → pilih **Bearer Token** → paste token dari langkah 1.
+### B. Test validasi keamanan (WAJIB dicoba, ini poin penting)
 
-   Harusnya muncul 2 kategori (Main Course, Beverage) dari seeder.
+5. **Coba kirim `menu_id` dari opsi yang bukan miliknya** (misal `option_value_ids`
+   milik menu lain) → harusnya dapat error 422 "opsi tidak valid untuk menu ini"
 
-3. **Test tanpa token / pakai token asal-asalan:**
-   Ulangi request yang sama tapi hapus tokennya → harusnya dapat `401 Unauthorized`.
-   Ini membuktikan endpoint admin sudah terlindungi.
+6. **Coba pesan menu yang `is_available: false`** (menu "Es Teh" dari seeder) →
+   harusnya ditolak dengan error, bukan malah berhasil dibuat
 
-4. **Test dengan akun Kitchen (bukan Admin):**
-   Login pakai `kitchen@restoran.test` / `password`, pakai token itu untuk akses
-   `/api/admin/categories` → harusnya dapat `403 Forbidden` (bukti middleware `role:admin`
-   jalan dengan benar, Kitchen tidak bisa akses endpoint Admin).
+### C. Test webhook (simulasi payment sukses)
 
-5. **Test CRUD lain:**
-   - `POST /api/admin/menus/{id}/option-groups` untuk tambah grup opsi baru ke menu
-   - `PATCH /api/admin/menus/{id}/toggle-availability` untuk toggle stok
-   - `POST /api/admin/tables/{id}/regenerate-token` untuk regenerate QR
+Karena webhook asli dari Midtrans butuh URL publik (server kamu tidak bisa diakses
+dari internet selama masih localhost), ada 2 cara testing:
 
-## Kalau Semua Test di Atas Lolos
+**Cara 1 — Simulasi manual via Postman (paling gampang, dari server sendiri):**
 
-Milestone 2 selesai. Lanjut ke **Milestone 3 — Customer Flow Sampai Bayar** (endpoint
-resolve token meja, list menu untuk customer, `OrderPricingService`, dan integrasi
-Midtrans Sandbox + webhook). Ini bagian paling kritis di seluruh project, jadi kabari
-saya kalau sudah siap.
+Buka `php artisan tinker` di CMD, lalu jalankan (ganti `order_id` dan `gross_amount`
+sesuai order yang tadi kamu buat):
+```php
+$serverKey = config('midtrans.server_key');
+$orderId = 'isi-uuid-order-tadi';
+$statusCode = '200';
+$grossAmount = '70000.00';
+echo hash('sha512', $orderId.$statusCode.$grossAmount.$serverKey);
+```
+Copy hasil hash-nya, lalu di Postman:
+`POST http://localhost:8000/api/payments/midtrans/callback`
+Body (JSON):
+```json
+{
+  "order_id": "isi-uuid-order-tadi",
+  "status_code": "200",
+  "gross_amount": "70000.00",
+  "transaction_status": "settlement",
+  "fraud_status": "accept",
+  "signature_key": "hasil_hash_dari_tinker_tadi"
+}
+```
+Cek lagi `GET /api/orders/{id}` → `payment_status` harusnya sudah jadi `success`
+dan `paid_at` terisi.
+
+**Cara 2 — Pakai ngrok (untuk test alur Snap sungguhan, opsional di tahap ini):**
+Install ngrok, jalankan `ngrok http 8000`, copy URL publik yang muncul (misal
+`https://xxxx.ngrok-free.app`), lalu daftarkan di Midtrans Dashboard Sandbox →
+**Settings → Configuration → Payment Notification URL** diisi
+`https://xxxx.ngrok-free.app/api/payments/midtrans/callback`. Baru setelah itu,
+kalau kamu buka halaman Snap dari `snap_token` dan benar-benar klik "bayar" pakai
+kartu test Midtrans, webhook asli akan masuk ke server lokal kamu lewat ngrok.
+
+7. **Test signature palsu (keamanan paling penting):** ulangi request webhook tapi
+   ganti `signature_key` jadi string sembarangan → harusnya dapat `403 Invalid
+   signature`, dan `payment_status` order **tidak berubah**. Ini bukti server tidak
+   akan percaya webhook palsu.
+
+## Checklist Sebelum Lanjut ke Milestone 4
+
+- [ ] Order berhasil dibuat, `total_price` dihitung dari server (coba kirim harga
+      palsu di body request kalau mau, tetap diabaikan karena kita tidak pernah baca
+      field harga dari client)
+- [ ] Opsi yang bukan milik menu tersebut ditolak
+- [ ] Menu `is_available: false` tidak bisa dipesan
+- [ ] Webhook dengan signature valid berhasil ubah `payment_status` jadi `success`
+- [ ] Webhook dengan signature palsu ditolak (403), status order tidak berubah
+
+Kalau semua lolos, lanjut ke **Milestone 4 — Kitchen API + Realtime** (endpoint
+update status masak + broadcasting event pakai Reverb, supaya order yang baru
+`success` ini benar-benar sampai real-time ke Kitchen Dashboard).
