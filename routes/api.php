@@ -10,6 +10,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\Customer\MenuController as CustomerMenuController;
 use App\Http\Controllers\Customer\OrderController;
 use App\Http\Controllers\Customer\PaymentController;
+use App\Http\Controllers\Kitchen\OrderController as KitchenOrderController;
 use Illuminate\Support\Facades\Route;
 
 // ==== CUSTOMER (PUBLIC, TANPA LOGIN) ====
@@ -19,8 +20,6 @@ Route::get('/categories', [CustomerMenuController::class, 'categories']);
 Route::get('/menus', [CustomerMenuController::class, 'menus']);
 Route::get('/menus/{menu}', [CustomerMenuController::class, 'showMenu']);
 
-// throttle:5,1 = maks 5 request per menit per IP. Proteksi kasar terhadap spam order;
-// bisa diperhalus nanti kalau perlu limit lebih ketat per session_token.
 Route::post('/orders', [OrderController::class, 'store'])->middleware('throttle:5,1');
 Route::get('/orders', [OrderController::class, 'index']);
 Route::get('/orders/{order}', [OrderController::class, 'show']);
@@ -55,5 +54,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('users', [UserController::class, 'index']);
         Route::post('users', [UserController::class, 'store']);
+    });
+
+    // ==== KITCHEN ONLY ====
+    Route::middleware('role:kitchen')->prefix('kitchen')->group(function () {
+        Route::get('orders', [KitchenOrderController::class, 'index']);
+        Route::get('orders/{order}', [KitchenOrderController::class, 'show']);
+        Route::patch('orders/{order}/status', [KitchenOrderController::class, 'updateStatus']);
     });
 });

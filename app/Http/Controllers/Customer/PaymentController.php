@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Customer;
 
+use App\Events\OrderCreated;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\PaymentWebhookLog;
@@ -45,8 +46,8 @@ class PaymentController extends Controller
                 'paid_at' => now(),
             ]);
 
-            // TODO Milestone 4: broadcast(new OrderCreated($order)) ke channel private-kitchen.
             // Baru di titik inilah Kitchen boleh tahu order ini ada.
+            event(new OrderCreated($order));
         } elseif ($status === 'expire') {
             $order->update(['payment_status' => 'expired']);
         } elseif (in_array($status, ['deny', 'cancel'])) {

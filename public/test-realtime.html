@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Test Realtime — Restaurant Ordering</title>
+<style>
+  body { font-family: sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; }
+  section { border: 1px solid #ccc; border-radius: 8px; padding: 16px; margin-bottom: 24px; }
+  input { width: 100%; padding: 8px; margin: 6px 0; box-sizing: border-box; }
+  button { padding: 8px 16px; cursor: pointer; }
+  #kitchen-log, #customer-log { background: #111; color: #0f0; padding: 12px; height: 200px; overflow-y: auto; font-family: monospace; font-size: 13px; white-space: pre-wrap; }
+  .status { font-weight: bold; }
+  .connected { color: green; }
+  .disconnected { color: red; }
+</style>
+</head>
+<body>
+<h1>Test Realtime (Reverb)</h1>
+<p>Halaman ini cuma buat testing manual Milestone 4 — bukan bagian dari Customer/Kitchen App beneran nanti. Boleh dihapus setelah testing selesai.</p>
+
+<section>
+  <h2>1. Channel Kitchen (private)</h2>
+  <label>Token Bearer (login sebagai Kitchen dulu di Postman, copy tokennya ke sini):</label>
+  <input type="text" id="kitchen-token" placeholder="contoh: 2|abcdef...">
+  <button onclick="connectKitchen()">Connect ke channel kitchen</button>
+  <p>Status: <span id="kitchen-status" class="status disconnected">belum connect</span></p>
+  <div id="kitchen-log"></div>
+</section>
+
+<section>
+  <h2>2. Channel Order Status (public, per session_token)</h2>
+  <label>Session token (yang dipakai waktu bikin order di Postman):</label>
+  <input type="text" id="session-token" placeholder="contoh: test-session-123">
+  <button onclick="connectCustomer()">Connect ke channel order</button>
+  <p>Status: <span id="customer-status" class="status disconnected">belum connect</span></p>
+  <div id="customer-log"></div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/pusher-js@8/dist/web/pusher.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/laravel-echo@1/dist/echo.iife.js"></script>
+<script>
+// Ganti nilai ini kalau REVERB_APP_KEY di .env kamu berbeda.
+const REVERB_APP_KEY = '23bx3kf8drogzl6onkv9';
+
+function log(elId, msg) {
+  const el = document.getElementById(elId);
+  const time = new Date().toLocaleTimeString();
+  el.textContent += `[${time}] ${msg}\n`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function connectKitchen() {
+  const token = document.getElementById('kitchen-token').value.trim();
+  if (!token) { alert('Isi token dulu'); return; }
+
+  const echo = new Echo({
+    broadcaster: 'reverb',
+    key: REVERB_APP_KEY,
+    wsHost: 'localhost',
+    wsPort: 8080,
+    wssPort: 8080,
+    forceTLS: false,
+    enabledTransports: ['ws', 'wss'],
+    authEndpoint: '/broadcasting/auth',
+    auth: { headers: { Authorization: 'Bearer ' + token } },
+  });
+
+  echo.connector.pusher.connection.bind('connected', () => {
+    document.getElementById('kitchen-status').textContent = 'connected';
+    document.getElementById('kitchen-status').className = 'status connected';
+  });
+
+  echo.connector.pusher.connection.bind('error', (e) => {
+    log('kitchen-log', 'Connection error: ' + JSON.stringify(e));
+  });
+
+  echo.private('kitchen')
+    .listen('.OrderCreated', (e) => {
+      log('kitchen-log', 'OrderCreated diterima:\n' + JSON.stringify(e.order, null, 2));
+    })
+    .error((e) => {
+      log('kitchen-log', 'ERROR subscribe channel kitchen: ' + JSON.stringify(e));
+    });
+
+  log('kitchen-log', 'Mencoba connect...');
+}
+
+function connectCustomer() {
+  const sessionToken = document.getElementById('session-token').value.trim();
+  if (!sessionToken) { alert('Isi session_token dulu'); return; }
+
+  const echo = new Echo({
+    broadcaster: 'reverb',
+    key: REVERB_APP_KEY,
+    wsHost: 'localhost',
+    wsPort: 8080,
+    wssPort: 8080,
+    forceTLS: false,
+    enabledTransports: ['ws', 'wss'],
+  });
+
+  echo.connector.pusher.connection.bind('connected', () => {
+    document.getElementById('customer-status').textContent = 'connected';
+    document.getElementById('customer-status').className = 'status connected';
+  });
+
+  echo.channel('order.' + sessionToken)
+    .listen('.OrderStatusUpdated', (e) => {
+      log('customer-log', 'OrderStatusUpdated diterima: ' + JSON.stringify(e));
+    });
+
+  log('customer-log', 'Mencoba connect ke channel: order.' + sessionToken);
+}
+</script>
+</body>
+</html>

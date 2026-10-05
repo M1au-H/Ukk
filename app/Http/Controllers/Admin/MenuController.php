@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Events\MenuAvailabilityChanged;
 use App\Http\Controllers\Controller;
 use App\Models\Menu;
 use Illuminate\Http\Request;
@@ -62,11 +63,13 @@ class MenuController extends Controller
 
     /**
      * Quick toggle stok habis/tersedia dari list menu di Admin Dashboard.
-     * Broadcasting realtime ke Customer App ditambahkan di Milestone 4.
+     * Broadcast realtime ke semua Customer App yang sedang buka menu.
      */
     public function toggleAvailability(Menu $menu)
     {
         $menu->update(['is_available' => ! $menu->is_available]);
+
+        event(new MenuAvailabilityChanged($menu));
 
         return response()->json($menu);
     }
