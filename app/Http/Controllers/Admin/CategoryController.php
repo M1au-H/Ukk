@@ -10,17 +10,20 @@ class CategoryController extends Controller
 {
     public function index()
     {
-        return Category::orderBy('sort_order')->get();
+        return Category::withCount('menus')->orderBy('sort_order')->orderBy('name')->get();
     }
 
     public function store(Request $request)
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'sort_order' => ['nullable', 'integer'],
+            'sort_order' => ['nullable', 'integer', 'min:0'],
         ]);
 
-        $category = Category::create($data);
+        $category = Category::create([
+            'name' => $data['name'],
+            'sort_order' => $data['sort_order'] ?? 0,
+        ]);
 
         return response()->json($category, 201);
     }
@@ -29,7 +32,7 @@ class CategoryController extends Controller
     {
         $data = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:255'],
-            'sort_order' => ['nullable', 'integer'],
+            'sort_order' => ['nullable', 'integer', 'min:0'],
         ]);
 
         $category->update($data);
@@ -39,6 +42,12 @@ class CategoryController extends Controller
 
     public function destroy(Category $category)
     {
+        abort_if(
+            $category->menus()->exists(),
+            422,
+            'Kategori ini masih punya menu. Pindahkan atau hapus menunya dulu.'
+        );
+
         $category->delete();
 
         return response()->json(['message' => 'Kategori dihapus.']);

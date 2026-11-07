@@ -25,14 +25,15 @@ class AuthController extends Controller
         $token = $user->createToken('api-token')->plainTextToken;
 
         return response()->json([
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'role' => $user->role,
-            ],
+            'user' => $this->userData($user),
             'token' => $token,
         ]);
+    }
+
+    /** Dipakai aplikasi panel untuk memastikan token yang tersimpan masih berlaku. */
+    public function me(Request $request)
+    {
+        return response()->json($this->userData($request->user()));
     }
 
     public function logout(Request $request)
@@ -40,5 +41,15 @@ class AuthController extends Controller
         $request->user()->currentAccessToken()->delete();
 
         return response()->json(['message' => 'Logged out.']);
+    }
+
+    private function userData($user): array
+    {
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => $user->role,
+        ];
     }
 }

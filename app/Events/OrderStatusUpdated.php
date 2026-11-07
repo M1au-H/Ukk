@@ -10,12 +10,9 @@ use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Channel PUBLIK (bukan PrivateChannel) yang dinamai pakai session_token.
- * Customer tidak punya akun/login, jadi tidak bisa dilewatkan lewat mekanisme
- * private-channel-auth Sanctum yang normal. Karena session_token sendiri
- * sudah berupa string acak panjang yang tidak bisa ditebak (mirip table_token),
- * ini "aman secukupnya" untuk kebutuhan project ini: orang lain harus tahu
- * persis session_token itu untuk bisa subscribe ke channel yang sama.
+ * Channel PUBLIK yang dinamai pakai session_token (lihat catatan di dokumen konteks:
+ * customer tidak punya akun, jadi tidak bisa memakai channel privat).
+ * Dipakai untuk perubahan status dapur DAN pembatalan oleh Admin (cancelled = true).
  */
 class OrderStatusUpdated implements ShouldBroadcastNow
 {
@@ -38,6 +35,7 @@ class OrderStatusUpdated implements ShouldBroadcastNow
         return [
             'order_id' => $this->order->id,
             'kitchen_status' => $this->order->kitchen_status,
+            'cancelled' => $this->order->cancelled_at !== null,
         ];
     }
 }

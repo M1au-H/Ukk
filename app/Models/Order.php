@@ -12,6 +12,7 @@ class Order extends Model
     protected $fillable = [
         'table_id', 'session_token', 'customer_name', 'payment_status',
         'kitchen_status', 'total_price', 'midtrans_order_id', 'snap_token', 'paid_at',
+        'cancelled_at', 'cancel_reason', 'cancelled_by',
     ];
 
     protected function casts(): array
@@ -19,6 +20,7 @@ class Order extends Model
         return [
             'total_price' => 'decimal:2',
             'paid_at' => 'datetime',
+            'cancelled_at' => 'datetime',
         ];
     }
 
@@ -42,8 +44,11 @@ class Order extends Model
         return $this->hasMany(PaymentWebhookLog::class);
     }
 
+    /** Order lunas yang masih perlu ditangani dapur (tidak dibatalkan, belum selesai). */
     public function scopePaidAndActive($query)
     {
-        return $query->where('payment_status', 'success')->where('kitchen_status', '!=', 'selesai');
+        return $query->where('payment_status', 'success')
+            ->where('kitchen_status', '!=', 'selesai')
+            ->whereNull('cancelled_at');
     }
 }

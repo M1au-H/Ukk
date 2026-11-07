@@ -41,17 +41,31 @@ class PaymentController extends Controller
         $fraudStatus = $payload['fraud_status'] ?? null;
 
         if (in_array($status, ['capture', 'settlement']) && $fraudStatus !== 'deny') {
-            $order->update([
-                'payment_status' => 'success',
-                'paid_at' => now(),
-            ]);
+            // Idempoten: Midtrans bisa mengirim callback yang sama lebih dari sekali.
+            if ($order->payment_status !== 'success') {
+                $order->update([
+                    'payment_status' => 'success',
+                    'paid_at' => now(),
+                ]);
 
-            // Baru di titik inilah Kitchen boleh tahu order ini ada.
-            event(new OrderCreated($order));
-        } elseif ($status === 'expire') {
-            $order->update(['payment_status' => 'expired']);
-        } elseif (in_array($status, ['deny', 'cancel'])) {
-            $order->update(['payment_status' => 'failed']);
+                $order->statusLogs()->create([
+                    'changed_by' => null,
+                    'status' => 'pembayaran_berhasil',
+                    'changed_at' => now(),
+                ]);
+
+                // Order yang sudah dibatalkan Admin sebelum lunas tidak boleh muncul di dapur.
+                if (! $order->cancelled_at) {
+                    event(new OrderCreated($order));
+                }
+            }
+        } elseif ($order->payment_status === 'menunggu_pembayaran') {
+            // Callback gagal/kedaluwarsa hanya boleh mengubah order yang masih menunggu.
+            if ($status === 'expire') {
+                $order->update(['payment_status' => 'expired']);
+            } elseif (in_array($status, ['deny', 'cancel'])) {
+                $order->update(['payment_status' => 'failed']);
+            }
         }
 
         return response()->json(['message' => 'OK']);

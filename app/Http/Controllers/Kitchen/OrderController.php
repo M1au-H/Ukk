@@ -10,7 +10,7 @@ use Illuminate\Http\Request;
 class OrderController extends Controller
 {
     /**
-     * List order aktif (payment sukses, belum selesai), dikelompokkan per meja.
+     * List order aktif (payment sukses, belum selesai, tidak dibatalkan), dikelompokkan per meja.
      * Response: { "14": [order, order, ...], "5": [order, ...] }
      */
     public function index()
@@ -25,7 +25,7 @@ class OrderController extends Controller
 
     public function show(Order $order)
     {
-        abort_unless($order->payment_status === 'success', 404);
+        abort_unless($order->payment_status === 'success' && ! $order->cancelled_at, 404);
 
         return $order->load(['table', 'items.options']);
     }
@@ -33,6 +33,7 @@ class OrderController extends Controller
     public function updateStatus(Request $request, Order $order)
     {
         abort_unless($order->payment_status === 'success', 422, 'Order ini belum lunas.');
+        abort_if($order->cancelled_at, 422, 'Order ini sudah dibatalkan.');
 
         $data = $request->validate([
             'kitchen_status' => ['required', 'in:diterima_dapur,diproses,siap_disajikan,selesai'],

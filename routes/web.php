@@ -3,28 +3,37 @@
 use Illuminate\Support\Facades\Route;
 
 /*
- * Customer App (Vue) sudah di-build ke public/customer, lalu dilayani Laravel dari sini.
- * Jadi cukup satu server (php artisan serve) untuk API sekaligus halaman pelanggan.
- * Semua alamat halaman Vue harus membalas index.html yang sama; yang menentukan
- * halaman mana yang tampil adalah router di sisi Vue.
+ * Aplikasi Vue hasil build dilayani langsung oleh Laravel dari folder public:
+ *   - Customer App           -> public/customer  (alamat /, /menu/{token}, /cart, /status)
+ *   - Admin + Kitchen App    -> public/panel     (alamat /panel/...)
+ * Jadi cukup satu server (php artisan serve) untuk API dan semua halaman.
+ * Semua alamat halaman membalas index.html yang sama; yang menentukan halaman mana yang
+ * tampil adalah router di sisi Vue.
  */
-$customerApp = function () {
-    $file = public_path('customer/index.html');
+$spa = function (string $folder, string $namaAplikasi) {
+    return function () use ($folder, $namaAplikasi) {
+        $file = public_path($folder.'/index.html');
 
-    abort_unless(
-        is_file($file),
-        503,
-        'Customer App belum di-build. Jalankan "npm run build:laravel" di folder restaurant-customer-app.'
-    );
+        abort_unless(
+            is_file($file),
+            503,
+            'Aplikasi belum di-build. Jalankan "npm run build:laravel" di folder '.$namaAplikasi.'.'
+        );
 
-    // no-cache supaya hasil build terbaru langsung terbaca (file di /customer/assets sudah ber-hash).
-    return response()->file($file, ['Cache-Control' => 'no-cache']);
+        // no-cache supaya hasil build terbaru langsung terbaca (file di /assets sudah ber-hash).
+        return response()->file($file, ['Cache-Control' => 'no-cache']);
+    };
 };
+
+$customerApp = $spa('customer', 'restaurant-customer-app');
+$panelApp = $spa('panel', 'restaurant-admin-kitchen-app');
 
 Route::get('/', $customerApp);
 Route::get('/menu/{tableToken}', $customerApp);
 Route::get('/cart', $customerApp);
 Route::get('/status', $customerApp);
+
+Route::get('/panel/{any?}', $panelApp)->where('any', '.*');
 
 // Route dummy: project ini API-only, tidak ada halaman login berbasis web.
 // Route ini WAJIB ada (walau tidak pernah benar-benar diakses user) supaya

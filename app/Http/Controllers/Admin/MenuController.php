@@ -5,13 +5,14 @@ namespace App\Http\Controllers\Admin;
 use App\Events\MenuAvailabilityChanged;
 use App\Http\Controllers\Controller;
 use App\Models\Menu;
+use App\Models\OrderItem;
 use Illuminate\Http\Request;
 
 class MenuController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Menu::with(['category', 'optionGroups.values']);
+        $query = Menu::with(['category', 'optionGroups.values'])->orderBy('category_id')->orderBy('name');
 
         if ($request->filled('category_id')) {
             $query->where('category_id', $request->category_id);
@@ -40,7 +41,7 @@ class MenuController extends Controller
 
         $menu = Menu::create($data);
 
-        return response()->json($menu, 201);
+        return response()->json($menu->load(['category', 'optionGroups.values']), 201);
     }
 
     public function update(Request $request, Menu $menu)
@@ -58,7 +59,7 @@ class MenuController extends Controller
 
         $menu->update($data);
 
-        return response()->json($menu);
+        return response()->json($menu->fresh(['category', 'optionGroups.values']));
     }
 
     /**
@@ -76,6 +77,12 @@ class MenuController extends Controller
 
     public function destroy(Menu $menu)
     {
+        abort_if(
+            OrderItem::where('menu_id', $menu->id)->exists(),
+            422,
+            'Menu ini sudah pernah dipesan, jadi tidak bisa dihapus (riwayat order akan rusak). Nonaktifkan saja.'
+        );
+
         $menu->delete();
 
         return response()->json(['message' => 'Menu dihapus.']);

@@ -10,7 +10,7 @@ class TableController extends Controller
 {
     public function index()
     {
-        return DiningTable::orderBy('table_number')->get();
+        return DiningTable::orderByRaw('CAST(table_number AS UNSIGNED)')->orderBy('table_number')->get();
     }
 
     public function store(Request $request)
@@ -53,6 +53,12 @@ class TableController extends Controller
 
     public function destroy(DiningTable $table)
     {
+        abort_if(
+            $table->orders()->exists(),
+            422,
+            'Meja ini sudah punya riwayat pesanan, jadi tidak bisa dihapus. Nonaktifkan saja.'
+        );
+
         $table->delete();
 
         return response()->json(['message' => 'Meja dihapus.']);
