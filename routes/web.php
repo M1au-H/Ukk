@@ -26,7 +26,7 @@ $spa = function (string $folder, string $namaAplikasi) {
 };
 
 $customerApp = $spa('customer', 'restaurant-customer-app');
-$panelApp = $spa('panel', 'restaurant-admin-kitchen-app');
+$panelApp = $spa('panel', 'restaurant-customer-app');
 
 Route::get('/', $customerApp);
 Route::get('/menu/{tableToken}', $customerApp);
