@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -35,6 +36,16 @@ Route::get('/status', $customerApp);
 
 Route::get('/panel/{any?}', $panelApp)->where('any', '.*');
 
+// Jaring pengaman: kalau karena sebab apa pun alamat di bawah /panel (misal /panel/orders saat
+// halaman di-refresh) tidak ditangkap rute di atas, tetap layani Admin App. Alamat lain tetap 404.
+Route::fallback(function (Request $request) use ($panelApp) {
+    if ($request->is('panel') || $request->is('panel/*')) {
+        return $panelApp();
+    }
+
+    abort(404);
+});
+
 // Route dummy: project ini API-only, tidak ada halaman login berbasis web.
 // Route ini WAJIB ada (walau tidak pernah benar-benar diakses user) supaya
 // Laravel tidak error saat mencoba generate URL ke route('login') ketika
@@ -43,4 +54,4 @@ Route::get('/panel/{any?}', $panelApp)->where('any', '.*');
 // dan diganti jadi response JSON 401.
 Route::get('/login', function () {
     return response()->json(['message' => 'Unauthenticated.'], 401);
-})->name('login');
+})->name('login');  

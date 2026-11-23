@@ -26,6 +26,7 @@ Route::get('/menus/{menu}', [CustomerMenuController::class, 'showMenu']);
 Route::post('/orders', [OrderController::class, 'store'])->middleware('throttle:5,1');
 Route::get('/orders', [OrderController::class, 'index']);
 Route::get('/orders/{order}', [OrderController::class, 'show']);
+Route::post('/orders/{order}/sync-payment', [PaymentController::class, 'sync'])->middleware('throttle:60,1');
 
 Route::post('/payments/midtrans/callback', [PaymentController::class, 'callback']);
 

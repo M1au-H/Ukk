@@ -2,12 +2,12 @@
 
 namespace App\Http\Controllers\Customer;
 
-use App\Events\OrderCreated;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\PaymentWebhookLog;
 use App\Services\MidtransService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class PaymentController extends Controller
 {
@@ -37,37 +37,39 @@ class PaymentController extends Controller
             return response()->json(['message' => 'Order not found.'], 404);
         }
 
-        $status = $payload['transaction_status'] ?? null;
-        $fraudStatus = $payload['fraud_status'] ?? null;
+        $this->midtransService->applyStatus(
+            $order,
+            $payload['transaction_status'] ?? null,
+            $payload['fraud_status'] ?? null,
+        );
 
-        if (in_array($status, ['capture', 'settlement']) && $fraudStatus !== 'deny') {
-            // Idempoten: Midtrans bisa mengirim callback yang sama lebih dari sekali.
-            if ($order->payment_status !== 'success') {
-                $order->update([
-                    'payment_status' => 'success',
-                    'paid_at' => now(),
-                ]);
+        return response()->json(['message' => 'OK']);
+    }
 
-                $order->statusLogs()->create([
-                    'changed_by' => null,
-                    'status' => 'pembayaran_berhasil',
-                    'changed_at' => now(),
-                ]);
+    /**
+     * Cadangan kalau webhook terlambat atau tidak sampai: Customer App meminta server menanyakan status
+     * transaksi langsung ke Midtrans. Yang dipercaya adalah jawaban Midtrans (lewat Server Key kita),
+     * bukan kiriman dari pelanggan, jadi tidak bisa dipalsukan.
+     */
+    public function sync(Request $request, Order $order)
+    {
+        $request->validate(['session_token' => ['required', 'string']]);
 
-                // Order yang sudah dibatalkan Admin sebelum lunas tidak boleh muncul di dapur.
-                if (! $order->cancelled_at) {
-                    event(new OrderCreated($order));
-                }
-            }
-        } elseif ($order->payment_status === 'menunggu_pembayaran') {
-            // Callback gagal/kedaluwarsa hanya boleh mengubah order yang masih menunggu.
-            if ($status === 'expire') {
-                $order->update(['payment_status' => 'expired']);
-            } elseif (in_array($status, ['deny', 'cancel'])) {
-                $order->update(['payment_status' => 'failed']);
+        abort_unless($order->session_token === $request->session_token, 403);
+
+        // Cek ke Midtrans paling sering sekali tiap 8 detik per order, walau aplikasi memanggil lebih sering.
+        if ($order->payment_status === 'menunggu_pembayaran' && Cache::add('sync-payment:'.$order->id, 1, 8)) {
+            $result = $this->midtransService->fetchStatus($order->midtrans_order_id ?: $order->id);
+
+            if ($result && $this->midtransService->amountMatches($order, $result)) {
+                $this->midtransService->applyStatus(
+                    $order,
+                    $result['transaction_status'] ?? null,
+                    $result['fraud_status'] ?? null,
+                );
             }
         }
 
-        return response()->json(['message' => 'OK']);
+        return $order->fresh()->load('items.options');
     }
 }
