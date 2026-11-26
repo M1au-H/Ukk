@@ -74,7 +74,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // ==== KITCHEN SAJA ====
     Route::middleware('role:kitchen')->prefix('kitchen')->group(function () {
         Route::get('orders', [KitchenOrderController::class, 'index']);
+        // Harus di atas orders/{order}, kalau tidak kata "history" dianggap sebagai id order.
+        Route::get('orders/history', [KitchenOrderController::class, 'history']);
         Route::get('orders/{order}', [KitchenOrderController::class, 'show']);
         Route::patch('orders/{order}/status', [KitchenOrderController::class, 'updateStatus']);
+        Route::patch('orders/{order}/cancel', [KitchenOrderController::class, 'cancel']);
     });
 });

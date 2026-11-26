@@ -36,6 +36,7 @@ class OrderStatusUpdated implements ShouldBroadcastNow
             'order_id' => $this->order->id,
             'kitchen_status' => $this->order->kitchen_status,
             'cancelled' => $this->order->cancelled_at !== null,
+            'cancel_reason' => $this->order->cancel_reason,
         ];
     }
 }

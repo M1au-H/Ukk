@@ -143,3 +143,5 @@ kartu test Midtrans, webhook asli akan masuk ke server lokal kamu lewat ngrok.
 Kalau semua lolos, lanjut ke **Milestone 4 — Kitchen API + Realtime** (endpoint
 update status masak + broadcasting event pakai Reverb, supaya order yang baru
 `success` ini benar-benar sampai real-time ke Kitchen Dashboard).
+
+ngrok http 8000
